@@ -4,37 +4,35 @@ import random
 import string
 import asyncio
 import os
+import re
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- 🛠 CONFIGURATION ---
-
-# 1. API ID & Hash (Defaults included, or set in Heroku)
+# Heroku Config Vars se value uthayega
 API_ID = int(os.getenv("API_ID", "33917975"))
 API_HASH = os.getenv("API_HASH", "9ded8160307386acef2451d464e7a9b9")
-
-# 2. BOT TOKEN (MUST be in Heroku Config Vars)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 if not BOT_TOKEN:
-    print("❌ ERROR: BOT_TOKEN missing! Add it to Heroku Config Vars.")
+    print("❌ ERROR: BOT_TOKEN missing! Heroku Config Vars check kar.")
 
 app = Client("render_pro_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 MAIL_TM_URL = "https://api.mail.tm"
 RENDER_API_URL = "https://api.render.com/v1/owners"
 
-# Temporary User Session Storage
+# User Data store karne ke liye
 user_sessions = {}
 
 # --- 📧 MAIL FUNCTIONS ---
 def get_mailtm_account():
     try:
-        # Fetch Domains
+        # Domain Fetch
         domain_resp = requests.get(f"{MAIL_TM_URL}/domains")
         if domain_resp.status_code != 200: return None
         
-        # Select Random Domain to avoid blocks
+        # Random Domain Select
         domains = domain_resp.json()['hydra:member']
         if not domains: return None
         
@@ -44,10 +42,10 @@ def get_mailtm_account():
         email = f"{username}@{domain}"
         password = "RenderPass" + ''.join(random.choices(string.digits, k=4)) + "!"
         
-        # Create Account
+        # Account Create
         create_resp = requests.post(f"{MAIL_TM_URL}/accounts", json={"address": email, "password": password})
         if create_resp.status_code == 201:
-            # Get Token
+            # Token Get
             token_resp = requests.post(f"{MAIL_TM_URL}/token", json={"address": email, "password": password})
             return email, password, token_resp.json()['token']
     except Exception as e:
@@ -59,15 +57,16 @@ def get_mailtm_account():
 @app.on_message(filters.command("start"))
 async def start(client, message):
     await message.reply_text(
-        "👋 **Welcome to Render Pro Bot!**\n\n"
-        "I will automate your Render Account Setup.\n"
-        "1. I will provide a High-Quality Email.\n"
-        "2. I will show the Verification Mail here.\n"
-        "3. I will extract the Owner ID from your API Key.\n\n"
-        "👇 **Click below to start:**",
+        "👋 **Render Pro Bot mein swagat hai!**\n\n"
+        "Main tera kaam aasaan kar dunga:\n"
+        "1. Fresh Email dunga.\n"
+        "2. **Mail aate hi khud Verify kar dunga.**\n"
+        "3. Tujhe seedha API Page pe bhejunga.\n"
+        "4. Owner ID nikal ke dunga.\n\n"
+        "👇 **Niche click karke start kar:**",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Go to Register Page", url="https://dashboard.render.com/register")],
-            [InlineKeyboardButton("⚡ Generate Fresh Email", callback_data="gen_mail")]
+            [InlineKeyboardButton("🔗 Open Register Page", url="https://dashboard.render.com/register")],
+            [InlineKeyboardButton("⚡ Generate Email", callback_data="gen_mail")]
         ])
     )
 
@@ -81,12 +80,12 @@ async def generate_mail(client, callback_query):
     
     if not email:
         await callback_query.message.edit_text(
-            "❌ Server Error (Mail.tm). Please try again later.", 
+            "❌ Server Error. Thodi der baad try kar.", 
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Retry", callback_data="gen_mail")]])
         )
         return
 
-    # Save Session
+    # Session Save
     user_sessions[chat_id] = {
         "email": email,
         "password": password,
@@ -97,23 +96,23 @@ async def generate_mail(client, callback_query):
         f"🛠 **NEW IDENTITY CREATED**\n\n"
         f"📧 **Email:** `{email}`\n"
         f"🔑 **Pass:** `{password}`\n\n"
-        "👉 **Steps:**\n"
-        "1. Go to Render, Register using these details.\n"
-        "2. Solve the Puzzle and Submit.\n"
-        "3. Wait here for the Verification Mail.\n"
+        "👉 **Tera Kaam:**\n"
+        "1. Incognito Tab mein Register kar.\n"
+        "2. Puzzle solve kar aur Submit daba.\n"
+        "3. **Bas!** Fir yahan wapas aaja, main verify kar dunga.\n"
         "👀 **Checking Inbox...**"
     )
     
     msg = await callback_query.message.edit_text(info_text)
     
-    # Start Background Mail Checker
+    # Background Mail Checker Start
     asyncio.create_task(check_inbox_loop(client, chat_id, token, msg))
 
-# --- 📨 MAIL LOOP ---
+# --- 📨 MAIL LOOP & AUTO VERIFY ---
 async def check_inbox_loop(client, chat_id, token, message):
     headers = {"Authorization": f"Bearer {token}"}
     
-    # Wait for 10 Minutes (120 * 5 sec)
+    # 10 Minute wait karega
     for i in range(120): 
         try:
             if chat_id not in user_sessions: break
@@ -125,25 +124,41 @@ async def check_inbox_loop(client, chat_id, token, message):
                     msg_id = data[0]['id']
                     full_msg = requests.get(f"{MAIL_TM_URL}/messages/{msg_id}", headers=headers).json()
                     
-                    subject = full_msg.get('subject', 'No Subject')
-                    body = full_msg.get('text') or full_msg.get('html') or "Empty Body"
+                    body = full_msg.get('text') or full_msg.get('html') or ""
                     
-                    # Truncate if too long for Telegram
-                    if len(body) > 3500: body = body[:3500] + "...(truncated)"
+                    # --- AUTO VERIFY LOGIC ---
+                    verify_link = None
+                    if "https://dashboard.render.com/verify-email" in body:
+                        # Regex se Link nikalenge
+                        match = re.search(r'https://dashboard\.render\.com/verify-email[^"\s<>]*', body)
+                        if match:
+                            verify_link = match.group(0)
+                            
+                            # Bot khud click karega (GET Request)
+                            verify_msg = "⚠️ Auto-Click Failed"
+                            try:
+                                requests.get(verify_link, timeout=10)
+                                verify_msg = "✅ **Email Auto-Verified!**"
+                            except:
+                                pass
 
-                    await message.edit_text(
-                        f"📩 **MAIL RECEIVED!**\n\n"
-                        f"**Subject:** {subject}\n"
-                        f"---------------------------------\n"
-                        f"{body}\n"
-                        f"---------------------------------\n\n"
-                        "👆 **Click the link above to Verify!**\n\n"
-                        "👇 **Now generate an API Key from Render Dashboard and send it here.**\n"
-                        "_(API Key starts with rnd_...)"
-                    )
-                    
-                    user_sessions[chat_id]['step'] = 'waiting_api'
-                    return 
+                            # User ko update do + Direct Link do
+                            await message.edit_text(
+                                f"📩 **MAIL RECEIVED**\n\n"
+                                f"{verify_msg}\n"
+                                f"Maine link click kar diya hai. Account Active hai!\n\n"
+                                "👇 **STEP 2: API KEY**\n"
+                                "1. Niche button daba, seedha Settings khulegi.\n"
+                                "2. 'Create API Key' daba.\n"
+                                "3. Key copy karke yahan bhej (starts with `rnd_`).",
+                                reply_markup=InlineKeyboardMarkup([
+                                    # YAHAN HAI MAGIC LINK - Seedha API Page
+                                    [InlineKeyboardButton("🔗 Go to API Settings", url="https://dashboard.render.com/u/me/keys")]
+                                ])
+                            )
+                            
+                            user_sessions[chat_id]['step'] = 'waiting_api'
+                            return 
         except:
             pass
         
@@ -161,10 +176,10 @@ async def handle_api_input(client, message):
 
     # Basic Validation
     if not api_key.startswith("rnd_"):
-        await message.reply_text("⚠️ **Invalid API Key!**\nIt must start with `rnd_`. Please send again.")
+        await message.reply_text("⚠️ **Invalid API Key!**\n `rnd_` se start hona chahiye.")
         return
 
-    wait_msg = await message.reply_text("🔄 **Fetching Owner ID from Render...**")
+    wait_msg = await message.reply_text("🔄 **Fetching Owner ID...**")
 
     # Fetch Owner ID
     try:
@@ -185,9 +200,9 @@ async def handle_api_input(client, message):
             email = user_sessions[chat_id]['email']
             password = user_sessions[chat_id]['password']
 
-            # 🔥 FINAL RESULT BLOCK (Lower Case Keys)
+            # 🔥 FINAL RESULT BLOCK (Small Letters)
             final_text = (
-                "✅ **ALL SET! HERE IS YOUR DATA**\n\n"
+                "✅ **ALL SET! COPY KAR LO**\n\n"
                 "👇 **Click to Copy All:**\n"
                 f"```\n"
                 f"email={email}\n"
@@ -195,24 +210,23 @@ async def handle_api_input(client, message):
                 f"owner_id={owner_id}\n"
                 f"render_api_key={api_key}\n"
                 f"```\n\n"
-                "👆 **Ready for deployment!**"
+                "👆 **Ab bot deploy kar de!**"
             )
             
             await wait_msg.edit_text(
                 final_text,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Start New Account", callback_data="gen_mail")]
+                    [InlineKeyboardButton("🔄 Start New", callback_data="gen_mail")]
                 ])
             )
             
-            # Clear Session for Security
             del user_sessions[chat_id]
             
         else:
             await wait_msg.edit_text(
-                f"❌ **Error Fetching Owner ID**\nStatus Code: {response.status_code}\n\nIs the API Key correct? Try again.",
+                f"❌ **Error:** {response.status_code}\nAPI Key galat lag rahi hai.",
                 reply_markup=InlineKeyboardMarkup([
-                     [InlineKeyboardButton("🔄 Retry Process", callback_data="gen_mail")]
+                     [InlineKeyboardButton("🔄 Retry", callback_data="gen_mail")]
                 ])
             )
 
