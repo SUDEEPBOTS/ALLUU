@@ -9,7 +9,8 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- 🛠 CONFIGURATION ---
 API_ID = int(os.getenv("API_ID", "33917975"))
-API_HASH = os.getenv("API_HASH", "9ded8160307386acef2451d464e7a9b9"))
+# 👇 Yahan galti thi, bracket hata diya hai
+API_HASH = os.getenv("API_HASH", "9ded8160307386acef2451d464e7a9b9")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # 🔥 YOUR DEPLOYER WEBSITE CONFIG
@@ -65,7 +66,7 @@ async def start(client, message):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔗 Go to Register Page", url="https://dashboard.render.com/register")],
             [InlineKeyboardButton("⚡ Generate Fresh Email", callback_data="gen_mail")],
-            [InlineKeyboardButton("➕ Manually Add to Panel", callback_data="manual_add_start")] # 🔥 New Button
+            [InlineKeyboardButton("➕ Manually Add to Panel", callback_data="manual_add_start")]
         ])
     )
 
