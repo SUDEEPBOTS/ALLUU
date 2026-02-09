@@ -14,8 +14,8 @@ API_HASH = os.getenv("API_HASH", "9ded8160307386acef2451d464e7a9b9")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # 🔥 YOUR DEPLOYER WEBSITE CONFIG
-DEPLOYER_URL = "https://uptimebot-rvni.onrender.com/api/add_account" 
-ADMIN_PANEL_URL = "https://uptimebot-rvni.onrender.com/admin"
+DEPLOYER_URL = "https://deploy12-rho.vercel.app/api/add_account" 
+ADMIN_PANEL_URL = "https://deploy12-rho.vercel.app/admin"
 ADMIN_SECRET = "sudeep_super_secret_key"
 
 if not BOT_TOKEN:
